@@ -3,8 +3,10 @@ from entities.user import User
 from entities.account import Account
 from flask_login import LoginManager, login_user, login_required, logout_user,  current_user
 from dotenv import load_dotenv
+from enums.transaction_type import TransactionType
+from entities.log import Log
+from enums.log_type import LogType
 import os
-
 load_dotenv()
 
 app = Flask(__name__)
@@ -29,7 +31,6 @@ def signup():
 @login_required
 def welcome():
     account = Account.get_account_by_user(current_user.id)
-   
     return render_template('welcome.html', account=account)
 
 
@@ -59,12 +60,20 @@ def login():
 
     user = User.check_login(email, password)
     if user:
+        if user.is_active:
+            login_user(user)
 
-        login_user(user)
-        return jsonify({
-            "success": True,
-            "message": "Sesión iniciada correctamente"
-        }), 200
+            Log.saveLog(user, "Inicio de sesión exitoso", LogType.LOGIN)
+
+            return jsonify({
+                "success": True,
+                "message": "Sesión iniciada correctamente."
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "message": "El usuario está suspendido, contacte a un administrador para más información."
+            }), 403
     else:
         return jsonify({
             "success": False,
@@ -85,4 +94,4 @@ def logout():
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)

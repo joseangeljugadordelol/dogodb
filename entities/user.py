@@ -2,14 +2,21 @@ from persistence.db import get_connection
 from werkzeug.security import generate_password_hash, check_password_hash
 import pymysql
 from flask_login import UserMixin
+from enums.profile import Profile
+from entities.permission import Permission
 
 class User (UserMixin):
-    def __init__(self, id: int, name:str, email:str, password:str):
+    def __init__(self, id: int, name:str, email:str, password:str, profile: Profile, permissions: list, is_active: bool):
         self.id= id
         self.name = name
         self.email = email
         self.password = password
-    
+        self.profile = profile
+        self.permissions = permissions
+        self._is_active = is_active
+    @property
+    def is_active(self):
+        return self._is_active
     def check_email_exists(email) -> bool:
         """
             Verifica si la cuenta de correo electrónico ya se encuentra registrada.
@@ -65,8 +72,7 @@ class User (UserMixin):
             connection = get_connection()
             cursor = connection.cursor(pymysql.cursors.DictCursor)
             
-
-            sql = "SELECT id, name, email, password FROM user WHERE email = %s"
+            sql = "SELECT id, name, email, password, is_active, profile FROM user WHERE email = %s"
             cursor.execute(sql, (email,))
 
             user = cursor.fetchone()
@@ -75,40 +81,55 @@ class User (UserMixin):
             connection.close()
 
             if user and check_password_hash(user["password"], password):
+                permissions = Permission.get_permissions_by_id(user["id"])
+
+                if user["is_active"] is not None:
+                    is_active = user["is_active"] == b'\x01'
+
                 return User(
                     user["id"],
                     user["name"],
                     user["email"],
-                    ""
+                    "",
+                    Profile(user["profile"]),
+                    permissions,
+                    is_active
                 )
 
             return None
         except Exception as ex:
-            print(f"Error login user:{ex}")
+            print(f"Error logging in user:{ex}")
             return False
         
     def get_by_id(id):
-            try:
-                connection = get_connection()
-                cursor = connection.cursor(pymysql.cursors.DictCursor)
+        try:
+            connection = get_connection()
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+            sql = "SELECT id, name, email, password, is_active, profile FROM user WHERE id = %s"
+            cursor.execute(sql, (id,))
+
+            user = cursor.fetchone()
+
+            cursor.close()
+            connection.close()
+
+            if user:
                 
-                sql = "SELECT id, name, email, password FROM user WHERE id = %s"
-                cursor.execute(sql, (id,))
+                permissions = Permission.get_permissions_by_id(user["id"])
+                if user["is_active"] is not None:
+                    is_active = user["is_active"] == b'\x01'
+                return User(
+                    user["id"],
+                    user["name"],
+                    user["email"],
+                    user["password"],
+                    Profile(user["profile"]),
+                    permissions,
+                    is_active
+                )
 
-                user = cursor.fetchone()
-                
-                cursor.close()
-                connection.close()
-
-                if user:
-                    return User(
-                        user["id"],
-                        user["name"],
-                        user["email"],
-                        user["password"]
-                    )
-
-                return None
-            except Exception as ex:
-                print(f"Error login user:{ex}")
-                return False
+            return None
+        except Exception as ex:
+            print(f"Error:{ex}")
+            return False
